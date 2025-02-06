@@ -1,0 +1,12 @@
+pandas
+datasets
+transformers[torch]
+librosa
+evaluate
+jiwer
+huggingface_hub
+webdataset
+tensorboardX
+indic_nlp_library
+accelerate
+wandb
