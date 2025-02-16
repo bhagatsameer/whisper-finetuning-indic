@@ -10,3 +10,4 @@ tensorboardX
 indic_nlp_library
 accelerate
 wandb
+bitsandbytes
