@@ -136,10 +136,10 @@ This command initiates the training process using the fine-tuning parameters pro
 
 ```bash
 $ python train.py \
-        --model-size tiny \
+        --model_size tiny \
         --language hi \
-        --batch-size 32 \
-        --grad-acc 4 \
+        --batch_size 32 \
+        --grad_acc 4 \
         --learning_rate 3e-5 \
         --warmup_steps 500 \
         --max_steps 10000 \
@@ -159,10 +159,10 @@ $ python train.py \
 
 ```bash
 $ python train.py \
-        --model-size tiny \
+        --model_size tiny \
         --language hi \
-        --batch-size 32 \
-        --grad-acc 4 \
+        --batch_size 32 \
+        --grad_acc 4 \
         --learning_rate 3e-5 \
         --warmup_steps 500 \
         --max_steps 10000 \

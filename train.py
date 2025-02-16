@@ -177,7 +177,7 @@ def train(opt):
         pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
-        if normalizer:
+        if opt.use_indic_norm and normalizer is not None:
             pred_str = [normalizer.normalize(pred) for pred in pred_str]
             label_str = [normalizer.normalize(label) for label in label_str]
         else:
@@ -258,10 +258,10 @@ def train(opt):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model-size', default="small", type=str, help='whisper model size.')
+    parser.add_argument('--model_size', default="small", type=str, help='whisper model size.')
     parser.add_argument('--language', default="hi", type=str, help='Dataset language.')
-    parser.add_argument('--batch-size', default=16, type=int, help='Batch-size per device.')
-    parser.add_argument('--grad-acc', default=4, type=int, help='Gradient accumulation steps.')
+    parser.add_argument('--batch_size', default=16, type=int, help='Batch-size per device.')
+    parser.add_argument('--grad_acc', default=4, type=int, help='Gradient accumulation steps.')
     parser.add_argument('--learning_rate', '-lr', default=3e-5, type=float, help='Learning rate.')
     parser.add_argument('--max_steps', default=10000, type=int, help='Max training steps.')
     parser.add_argument('--warmup_steps', default=500, type=int, help='Warmup training steps.')
