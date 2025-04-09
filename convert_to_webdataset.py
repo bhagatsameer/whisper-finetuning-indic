@@ -42,60 +42,82 @@ def save_shard(output_dir, shard_idx, shard_samples):
             })
 
 
-def process_shard_range(args):
+def process_single_shard(args):
     """
-    Process a range of the dataset and save shards.
+    Process a single shard: extract the samples and save them.
     Args:
-        args: Tuple containing (dataset_path, shard_indices, output_dir, shard_size).
+        args: Tuple containing (dataset, shard_idx, start_idx, output_dir, shard_size).
+    Returns:
+        The shard index that was processed.
     """
-    dataset, shard_indices, output_dir, shard_size = args
-    for shard_idx, start_idx in shard_indices:
-        end_idx = start_idx + shard_size
-        shard_samples = dataset.select(range(start_idx, min(len(dataset), end_idx)))
-        save_shard(output_dir, shard_idx, shard_samples)
+    dataset, shard_idx, start_idx, output_dir, shard_size = args
+    end_idx = start_idx + shard_size
+    shard_samples = dataset.select(range(start_idx, min(len(dataset), end_idx)))
+    save_shard(output_dir, shard_idx, shard_samples)
+    return shard_idx
 
 
 def create_webdataset(dataset, output_dir, shard_size, num_proc, shard_start_idx):
     """
     Process dataset into WebDataset shards using multiprocessing.
     Args:
-        dataset_path: Path to the dataset.
+        dataset: The dataset object.
         output_dir: Directory to save tar shards.
         shard_size: Number of samples per shard.
-        num_proc: Number of processes to use.
+        num_proc: Number of processes for multiprocessing.
         shard_start_idx: Starting index for shard naming.
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    # Load the dataset to get the total number of samples
     total_samples = len(dataset)
     print(f"Total samples in dataset: {total_samples}")
     total_shards = (total_samples + shard_size - 1) // shard_size
 
-    shard_indices = [
-        (shard_start_idx + i, i * shard_size)
+    shard_tasks = [
+        (dataset, shard_start_idx + i, i * shard_size, output_dir, shard_size)
         for i in range(total_shards)
     ]
 
-    num_proc = min(num_proc, len(shard_indices))
-    shard_ranges = np.array_split(shard_indices, num_proc)
-
-    args = [
-        (dataset, shard_range, output_dir, shard_size)
-        for shard_range in shard_ranges
-    ]
-
     with Pool(num_proc) as pool:
-        list(tqdm(pool.imap(process_shard_range, args), total=num_proc, desc="Processing shards"))
+        with tqdm(total=total_shards, desc="Processing shards") as pbar:
+            for _ in pool.imap_unordered(process_single_shard, shard_tasks):
+                pbar.update(1)
 
-# Main script with chunked processing
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert a dataset into WebDataset tar shards in memory-efficient chunks.")
-    parser.add_argument("--preprocessed_datasets", type=str, required=True, help="Path to the dir with preprocessed_datasets")
-    parser.add_argument("--output_dir", type=str, default="./webdataset-hi", help="Directory to save tar shards.")
-    parser.add_argument("--shard_size", type=int, default=1000, help="Number of samples per shard.")
-    parser.add_argument("--num_proc", type=int, default=8, help="Number of processes for multiprocessing.")
-    parser.add_argument("--shard_start_idx", type=int, default=0, help="Starting index for shard naming.")
+    parser = argparse.ArgumentParser(
+        description="Convert a dataset into WebDataset tar shards in memory-efficient chunks."
+    )
+    parser.add_argument(
+        "--preprocessed_datasets",
+        type=str,
+        required=True,
+        help="Path to the dir with preprocessed_datasets",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="./webdataset-hi",
+        help="Directory to save tar shards.",
+    )
+    parser.add_argument(
+        "--shard_size",
+        type=int,
+        default=1000,
+        help="Number of samples per shard.",
+    )
+    parser.add_argument(
+        "--num_proc",
+        type=int,
+        default=8,
+        help="Number of processes for multiprocessing.",
+    )
+    parser.add_argument(
+        "--shard_start_idx",
+        type=int,
+        default=0,
+        help="Starting index for shard naming.",
+    )
     args = parser.parse_args()
 
     # Ideally, we want to create the webdataset with samples already shuffled
