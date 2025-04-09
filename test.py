@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 
 import torch
 import evaluate
@@ -19,6 +20,11 @@ from indicnlp.normalize.indic_normalize import DevanagariNormalizer
 AUDIO_COLUMN_NAME = "audio"
 TEXT_COLUMN_NAME = "sentence"
 
+
+def is_length_hallucination(pred_text, ref_text, ratio_threshold=1.5):
+    pred_len = len(pred_text.split())
+    ref_len = len(ref_text.split())
+    return pred_len > ratio_threshold * ref_len
 
 def validate(model_path, dataset, opt, language="hi", whisper_norm=True, model_size="tiny"):
     """
@@ -85,11 +91,16 @@ def validate(model_path, dataset, opt, language="hi", whisper_norm=True, model_s
         pred_str = [pred_str[i].strip() for i in range(len(pred_str)) if len(label_str[i]) > 0]
         label_str = [label_str[i].strip() for i in range(len(label_str)) if len(label_str[i]) > 0]
 
+        if is_length_hallucination(pred_str[0], label_str[0]):
+            return False
+
         wer_value = 100 * metric.compute(predictions=pred_str, references=label_str)
         return {"wer": wer_value}
 
     total_wer = 0.0
     num_batches = 0
+    if opt.remove_digits:
+        dataset["test"] = dataset["test"].filter(lambda x: not re.search(r'\d', x["sentence"]))
 
     for batch in dataset["test"]:
         inputs = processor(batch["audio"]["array"], return_tensors="pt")
@@ -97,7 +108,9 @@ def validate(model_path, dataset, opt, language="hi", whisper_norm=True, model_s
 
         generated_ids = model.generate(
             inputs=input_features.to(device),
-            forced_decoder_ids=forced_decoder_ids
+            forced_decoder_ids=forced_decoder_ids,
+            repetition_penalty=1.15,
+            num_beams=5
         ).cpu()
 
         label_ids = tokenizer(batch["sentence"]).input_ids
@@ -112,8 +125,10 @@ def validate(model_path, dataset, opt, language="hi", whisper_norm=True, model_s
             labels = labels[:, 1:]
 
         preds = {"predictions": generated_ids, "label_ids": labels}
-        total_wer += compute_metrics(preds, wnorm=whisper_norm)["wer"]
-        num_batches += 1
+        wer_ = compute_metrics(preds, wnorm=whisper_norm)
+        if wer_:
+            total_wer += wer_["wer"]
+            num_batches += 1
 
     return total_wer / num_batches if num_batches > 0 else 0.0
 
@@ -182,6 +197,7 @@ def main():
     parser.add_argument('--eval_dataset', default='google/fleurs', help="Evaluation dataset.")
     parser.add_argument('--eval_split', default='train+test+validation', help="Dataset split to use for evaluation. Defaults to full dataset.")
     parser.add_argument('--dataset_language', default='hi_in', help="Evaluation dataset language code (if applicable).")
+    parser.add_argument('--remove_digits', default=False, action='store_true', help="Remove samples with digits.")
 
     opt = parser.parse_args()
 
