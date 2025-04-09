@@ -39,6 +39,8 @@ hf_token = get_token()
 AUDIO_COLUMN_NAME = "audio"
 TEXT_COLUMN_NAME = "sentence"
 
+torch.manual_seed(1337)
+torch.cuda.manual_seed(1337)
 
 @dataclass
 class DataCollatorSpeechSeq2SeqWithPadding:
@@ -133,19 +135,22 @@ def train(opt):
     device = opt.device
     if device is None:
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
     model_size = opt.model_size
     feature_extractor = WhisperFeatureExtractor.from_pretrained(f"openai/whisper-{model_size}")
 
     tokenizer = WhisperTokenizer.from_pretrained(
         f"openai/whisper-{model_size}",
         language=language, 
-        task="transcribe"
+        task="transcribe",
+        predict_timestamps=True
     )
     processor = WhisperProcessor(feature_extractor, tokenizer)
 
     metric = evaluate.load("wer")    
-    model = WhisperForConditionalGeneration.from_pretrained(f"openai/whisper-{model_size}")
+    if opt.pretrained_ckpt:
+        model = WhisperForConditionalGeneration.from_pretrained(opt.pretrained_ckpt)
+    else:
+        model = WhisperForConditionalGeneration.from_pretrained(f"openai/whisper-{model_size}")
     model.config.forced_decoder_ids = None
     model.config.suppress_tokens = []
     model.config.use_cache = False
@@ -167,6 +172,7 @@ def train(opt):
         Returns:
             A dictionary with the WER value.
         """
+        global normalizer
         pred_ids = pred.predictions
         label_ids = pred.label_ids
 
@@ -183,11 +189,10 @@ def train(opt):
         else:
             pred_str = [processor.tokenizer._normalize(pred) for pred in pred_str]
             label_str = [processor.tokenizer._normalize(label) for label in label_str]
-        
+
         # filtering step to only evaluate the samples that correspond to non-zero references
         pred_str = [pred_str[i].strip() for i in range(len(pred_str)) if len(label_str[i]) > 0]
         label_str = [label_str[i].strip() for i in range(len(label_str)) if len(label_str[i]) > 0]
-
         wer = 100 * metric.compute(predictions=pred_str, references=label_str)
 
         return {"wer": wer}
@@ -225,11 +230,11 @@ def train(opt):
         eval_strategy="steps",
         per_device_eval_batch_size=8,
         predict_with_generate=True,
-        generation_max_length=225,
+        generation_max_length=448,
         dataloader_pin_memory=True,
         save_steps=opt.save_steps,
         eval_steps=opt.eval_steps,
-        logging_steps=25,
+        logging_steps=100,
         save_total_limit=5,
         report_to=["tensorboard", "wandb"],
         load_best_model_at_end=True,
@@ -237,9 +242,9 @@ def train(opt):
         greater_is_better=False,
         push_to_hub=False,
         ignore_data_skip=True,
-        optim="adamw_bnb_8bit",
         save_safetensors=False,
-        dataloader_num_workers=opt.num_workers)
+        dataloader_num_workers=opt.num_workers,
+        torch_compile=False)
 
     trainer = Seq2SeqTrainer(
         args=training_args,
@@ -254,6 +259,7 @@ def train(opt):
     trainer.train(resume_from_checkpoint=opt.resume_from_checkpoint)
     model.save_pretrained(training_args.output_dir)
     processor.save_pretrained(training_args.output_dir)
+    tokenizer.save_pretrained(training_args.output_dir)
 
 
 def main():
@@ -286,6 +292,7 @@ def main():
     parser.add_argument('--wandb_project_name', default="whisper-hindi", type=str, help='W&B project name.')
     parser.add_argument('--wandb_run_name', default="run0-small", type=str, help='W&B run name.')
     parser.add_argument('--use_indic_norm', default=False, action='store_true', help="Use Indic normalization for text processing.")
+    parser.add_argument('--pretrained-ckpt', default=None, help="Checkpoint to start training from.")
 
     opt = parser.parse_args()
 
@@ -304,6 +311,7 @@ def main():
     for arg, value in vars(opt).items():
         print(f"{arg}: {value}")
 
+    global normalizer
     if opt.use_indic_norm:
         common.set_resources_path('indic_nlp_resources')
         loader.load()
