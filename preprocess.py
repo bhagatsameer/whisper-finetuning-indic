@@ -43,11 +43,11 @@ def preprocess_dataset(dataset, processor, feature_extractor, save_dir):
         if normalizer is not None:
             input_str = normalizer.normalize(batch[TEXT_COLUMN_NAME]).strip()
         else:
-            input_str = processor.tokenizer._normalize(batch[TEXT_COLUMN_NAME]).strip()
+            input_str = batch[TEXT_COLUMN_NAME].strip()
 
         batch["labels"] = processor.tokenizer(input_str).input_ids
         return batch
-    
+
     def is_labels_none(labels):
         return labels is not None and len(labels) > 0
     
@@ -164,13 +164,18 @@ def main():
                         help="Language to use when processing the dataset.")
     parser.add_argument('--use_indic_norm', default=False, action='store_true',
                         help="Use Indic normalization for text processing.")
+    parser.add_argument('--predict_timestamps', default=False, action='store_true',
+                        help="Whether to omit the <|notimestamps|> token at the start of the sequence.")
+    parser.add_argument('--normalize', default=False, action='store_true',
+                        help="Whether to normalize the dataset.")
     opt = parser.parse_args()
 
     # Initialize tokenizer, feature extractor, and processor for Whisper.
     tokenizer = WhisperTokenizer.from_pretrained(
         f"openai/whisper-{opt.model_size}",
         language=opt.language,
-        task="transcribe"
+        task="transcribe",
+        predict_timestamps=opt.predict_timestamps,
     )
     feature_extractor = WhisperFeatureExtractor.from_pretrained(
         f"openai/whisper-{opt.model_size}"
@@ -181,9 +186,9 @@ def main():
     if os.path.exists(opt.save_dir):
         shutil.rmtree(opt.save_dir)
 
-    # Setup Indic normalization if enabled.
     global normalizer
-    if opt.use_indic_norm and opt.language in ["hi"]:
+    # Setup Indic normalization if enabled.
+    if opt.use_indic_norm and opt.language in ["hi"] and opt.normalize:
         if not os.path.exists("./indic_nlp_resources"):
             raise ValueError("Please clone `indic_nlp_resources` to use Indic normalizer.")
         common.set_resources_path('indic_nlp_resources')
