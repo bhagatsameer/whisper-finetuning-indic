@@ -227,7 +227,7 @@ def train(opt):
         max_steps=opt.max_steps,
         gradient_checkpointing=True,
         fp16=True,
-        eval_strategy="steps",
+        evaluation_strategy="steps",
         per_device_eval_batch_size=8,
         predict_with_generate=True,
         generation_max_length=448,
