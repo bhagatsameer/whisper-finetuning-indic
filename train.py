@@ -246,16 +246,24 @@ def train(opt):
         dataloader_num_workers=opt.num_workers,
         torch_compile=False)
 
+#    trainer = Seq2SeqTrainer(
+#        args=training_args,
+#        model=model,
+#        train_dataset=train_dataset,
+#        eval_dataset=eval_dataset,
+#        data_collator=data_collator,
+#        compute_metrics=compute_metrics,
+#        processing_class=tokenizer,
+#    )
     trainer = Seq2SeqTrainer(
-        args=training_args,
-        model=model,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-        processing_class=tokenizer,
-    )
-
+       args=training_args,
+       model=model,
+       train_dataset=train_dataset,
+       eval_dataset=eval_dataset,
+       data_collator=data_collator,
+       compute_metrics=compute_metrics,
+       tokenizer=processor.tokenizer,
+   )
     trainer.train(resume_from_checkpoint=opt.resume_from_checkpoint)
     model.save_pretrained(training_args.output_dir)
     processor.save_pretrained(training_args.output_dir)
